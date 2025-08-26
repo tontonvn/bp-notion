@@ -1,75 +1,80 @@
 <!doctype html>
-function stats(arr){ if(!arr.length) return {count:0}; const sbps=arr.map(e=>e.sbp), dbps=arr.map(e=>e.dbp); const avg=a=>a.reduce((x,y)=>x+y,0)/a.length; return { count:arr.length, avgSBP:avg(sbps), avgDBP:avg(dbps), minSBP:Math.min(...sbps), maxSBP:Math.max(...sbps), minDBP:Math.min(...dbps), maxDBP:Math.max(...dbps)}; }
-function drawChart(arr){ const c=$('chart'), ctx=c.getContext('2d'); const w=c.width=c.clientWidth*devicePixelRatio, h=c.height=c.clientHeight*devicePixelRatio; ctx.clearRect(0,0,w,h); if(!arr.length){ ctx.fillStyle='#94a3b8'; ctx.fillText('データなし',10,20); return; } const sorted=[...arr].sort((a,b)=>new Date(a.t)-new Date(b.t)); const xs=sorted.map(e=>new Date(e.t).getTime()); const minX=Math.min(...xs), maxX=Math.max(...xs); const pad=20; const sbps=sorted.map(e=>e.sbp), dbps=sorted.map(e=>e.dbp); const minY=Math.min(Math.min(...dbps),50), maxY=Math.max(Math.max(...sbps),180); const scaleX=x=> pad+(x-minX)/(maxX-minX||1)*(w-2*pad); const scaleY=y=> h-(y-minY)/(maxY-minY||1)*(h-2*pad); const line=vals=>{ ctx.beginPath(); vals.forEach((v,i)=>{ const x=scaleX(xs[i]), y=scaleY(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.lineWidth=2; ctx.stroke(); }; ctx.strokeStyle='#0f172a'; line(sbps); ctx.strokeStyle='#64748b'; line(dbps); }
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>血圧管理（Notion同期・体重対応）</title>
+  <style>
+    body { font-family: sans-serif; background:#f8fafc; margin:0; padding:20px; }
+    h1 { font-size:1.4rem; }
+    .card { background:#fff; padding:16px; margin-bottom:20px; border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+    label { display:block; font-size:.9rem; margin-top:6px; }
+    input,select,button { font-size:1rem; padding:8px; margin-top:2px; border:1px solid #ccc; border-radius:8px; width:100%; }
+    button { background:#0ea5e9; color:#fff; border:none; cursor:pointer; margin-top:8px; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th,td { border-bottom:1px solid #ddd; padding:6px; font-size:.9rem; text-align:left; }
+    .pill { padding:2px 6px; border-radius:8px; font-size:.8rem; }
+    .ok { background:#d1fae5; color:#065f46; }
+    .warn { background:#fef3c7; color:#92400e; }
+    .bad { background:#fee2e2; color:#991b1b; }
+  </style>
+</head>
+<body>
+  <h1>血圧管理アプリ（Notion同期・体重対応）</h1>
+  
+  <div class="card">
+    <h2>入力</h2>
+    <label>収縮期（上）mmHg <input id="sbp" type="number"></label>
+    <label>拡張期（下）mmHg <input id="dbp" type="number"></label>
+    <label>脈拍 bpm <input id="hr" type="number"></label>
+    <label>体重 kg <input id="wt" type="number" step="0.1"></label>
+    <label>測定日時 <input id="dt" type="datetime-local"></label>
+    <label>測定部位 
+      <select id="site">
+        <option value="home">家庭</option>
+        <option value="office">診療室</option>
+      </select>
+    </label>
+    <label>メモ <input id="note" type="text"></label>
+    <label><input id="syncToggle" type="checkbox"> Notionに自動同期する</label>
+    <button id="saveBtn">保存</button>
+  </div>
 
+  <div class="card">
+    <h2>履歴</h2>
+    <table id="tbl"><thead>
+      <tr><th>日時</th><th>場所</th><th>上</th><th>下</th><th>脈拍</th><th>体重</th><th>判定</th><th>メモ</th></tr>
+    </thead><tbody></tbody></table>
+  </div>
 
-// ====== 多変量回帰（SBP/DBP ~ 日数 + 体重） ======
-function runML(){
-const now=new Date(); const from=addDays(now,-30);
-const last30=entries.filter(e=>new Date(e.t)>=from && e.wt!=null).sort((a,b)=>new Date(a.t)-new Date(b.t));
-const box=$('mlBox');
-if(last30.length<5){ box.textContent='データが5件以上たまると予測します（体重含む）'; return; }
-const x1=last30.map((_,i)=>i); // 日数（0,1,2,...）
-const x2=last30.map(e=>Number(e.wt));
-const yS=last30.map(e=>Number(e.sbp));
-const yD=last30.map(e=>Number(e.dbp));
-
-
-const modelS=mlr2(x1,x2,yS); // {a,b,c}: y=a*x1+b*x2+c
-const modelD=mlr2(x1,x2,yD);
-const start=x1[x1.length-1]+1, H=7;
-const predAvg=(m)=>{ let s=0; for(let i=0;i<H;i++){ s += m.a*(start+i)+m.b*avg(x2)+m.c; } return s/H; };
-const pSBP=predAvg(modelS), pDBP=predAvg(modelD);
-const t=target(); const j=judge(pSBP,pDBP,t);
-box.innerHTML=`次週平均予測: 上${pSBP.toFixed(0)} 下${pDBP.toFixed(0)} → <span class="pill ${j[1]}">${j[0]}</span><br><span class="small">（説明変数: 日数・体重／正規方程式）</span>`;
-}
-
-
-// 2変数の最小二乗：正規方程式を展開して係数を閉形式で解く
-function mlr2(x1,x2,y){
-const n=x1.length; const sx1=sum(x1), sx2=sum(x2), sy=sum(y);
-const sx1x1=sum(x1.map(v=>v*v));
-const sx2x2=sum(x2.map(v=>v*v));
-const sx1x2=sum(x1.map((v,i)=>v*x2[i]));
-const sx1y=sum(x1.map((v,i)=>v*y[i]));
-const sx2y=sum(x2.map((v,i)=>v*y[i]));
-// |sx1x1 sx1x2 sx1| |a| |sx1y|
-// |sx1x2 sx2x2 sx2|*|b| = |sx2y|
-// | sx1 sx2 n| |c| | sy |
-const M=[
-[sx1x1, sx1x2, sx1],
-[sx1x2, sx2x2, sx2],
-[sx1, sx2, n ]
-];
-const v=[sx1y, sx2y, sy];
-const coeff=solve3(M,v); // [a,b,c]
-return {a:coeff[0], b:coeff[1], c:coeff[2]};
-}
-function solve3(M,v){ // ガウス消去
-const A=M.map((r,i)=>[...r,v[i]]);
-for(let i=0;i<3;i++){
-// ピボット選択
-let p=i; for(let r=i+1;r<3;r++){ if(Math.abs(A[r][i])>Math.abs(A[p][i])) p=r; }
-if(p!==i){ const tmp=A[i]; A[i]=A[p]; A[p]=tmp; }
-const pivot=A[i][i]||1e-12;
-for(let j=i;j<4;j++) A[i][j]/=pivot;
-for(let r=0;r<3;r++) if(r!==i){ const f=A[r][i]; for(let j=i;j<4;j++) A[r][j]-=f*A[i][j]; }
-}
-return [A[0][3],A[1][3],A[2][3]];
-}
-const sum=a=>a.reduce((x,y)=>x+y,0); const avg=a=>sum(a)/a.length;
-
-
-function addDays(d,n){ const dd=new Date(d); dd.setDate(dd.getDate()+n); return dd; }
-function fmt(iso){ const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
-function escapeHTML(s){ return s.replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m])); }
-function toCSV(arr){ const header='datetime,site,sbp,dbp,hr,wt,note\n'; const rows=arr.map(e=>[e.t,e.site,e.sbp,e.dbp,e.hr??'',e.wt??'',(e.note||'').replace(/\n/g,' ')].join(',')); return header+rows.join('\n'); }
-function fromCSV(text){ const lines=text.trim().split(/\r?\n/), out=[], idx={}; lines[0].split(',').forEach((h,i)=>idx[h.trim()]=i); for(let i=1;i<lines.length;i++){ const c=lines[i].split(','); out.push({ t:c[idx.datetime], site:c[idx.site]||'home', sbp:Number(c[idx.sbp]), dbp:Number(c[idx.dbp]), hr:c[idx.hr]?Number(c[idx.hr]):null, wt:c[idx.wt]?Number(c[idx.wt]):null, note:c[idx.note]||'' }); } return out; }
-
-
-refresh();
-// 任意：同期URLをブラウザに保存（GitHub Pages → サブドメインが異なる場合に必要）
-window.setSyncUrl=function(url){ localStorage.setItem('bp_sync_url', url); $('syncEndpoint').textContent=url; };
-</script>
+  <script>
+    const entries = JSON.parse(localStorage.getItem("bp_entries")||"[]");
+    const $ = id => document.getElementById(id);
+    function judge(sbp,dbp){ 
+      if(sbp<130 && dbp<80) return ['達成','ok']; 
+      if(sbp<135 && dbp<85) return ['やや高め','warn']; 
+      return ['高め','bad']; 
+    }
+    function refresh(){
+      const tbody=$("tbl").querySelector("tbody");
+      tbody.innerHTML="";
+      entries.sort((a,b)=>new Date(b.t)-new Date(a.t)).forEach(e=>{
+        const j=judge(e.sbp,e.dbp);
+        const tr=document.createElement("tr");
+        tr.innerHTML=`<td>${e.t}</td><td>${e.site}</td><td>${e.sbp}</td><td>${e.dbp}</td><td>${e.hr||""}</td><td>${e.wt||""}</td><td><span class="pill ${j[1]}">${j[0]}</span></td><td>${e.note||""}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    $("saveBtn").onclick=()=>{
+      const sbp=$("sbp").value, dbp=$("dbp").value;
+      if(!sbp||!dbp){alert("上と下を入力してください");return;}
+      const item={ sbp, dbp, hr:$("hr").value, wt:$("wt").value, t:$("dt").value||new Date().toISOString(), site:$("site").value, note:$("note").value };
+      entries.push(item);
+      localStorage.setItem("bp_entries",JSON.stringify(entries));
+      refresh();
+      if($("syncToggle").checked){ alert("Notion同期はサーバー設定が必要です"); }
+    };
+    refresh();
+  </script>
 </body>
 </html>
