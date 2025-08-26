@@ -1,4 +1,3 @@
-// netlify/functions/notion-sync.js
 import { Client } from "@notionhq/client";
 
 const cors = {
@@ -8,15 +7,12 @@ const cors = {
 };
 
 export async function handler(event) {
-  // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers: cors, body: "ok" };
   }
-
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, headers: cors, body: "Method Not Allowed" };
   }
-
   try {
     const { sbp, dbp, hr, wt, t, note, site } = JSON.parse(event.body || "{}");
     if (!sbp || !dbp || !t) throw new Error("missing fields");
@@ -32,12 +28,12 @@ export async function handler(event) {
         SBP:    { number: Number(sbp) },
         DBP:    { number: Number(dbp) },
         HR:     { number: hr != null ? Number(hr) : null },
-        Weight: { number: wt != null ? Number(wt) : null },
+        Weight: { number: wt != null ? Number(wt) : null }
       },
-      children: note
-        ? [{ object: "block", type: "paragraph",
-             paragraph: { rich_text: [{ type: "text", text: { content: note } }] } }]
-        : [],
+      children: note ? [{
+        object: "block", type: "paragraph",
+        paragraph: { rich_text: [{ type: "text", text: { content: note } }] }
+      }] : []
     });
 
     return { statusCode: 200, headers: { ...cors, "Content-Type": "application/json" }, body: JSON.stringify({ ok: true }) };
