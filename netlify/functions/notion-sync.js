@@ -1,5 +1,3 @@
-import { Client } from "@notionhq/client";
-
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type",
@@ -7,16 +5,20 @@ const cors = {
 };
 
 export async function handler(event) {
+  // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers: cors, body: "ok" };
   }
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, headers: cors, body: "Method Not Allowed" };
   }
+
   try {
     const { sbp, dbp, hr, wt, t, note, site } = JSON.parse(event.body || "{}");
     if (!sbp || !dbp || !t) throw new Error("missing fields");
 
+    // ここで初めてSDKを読み込む（依存未解決でもOPTIONSは成功する）
+    const { Client } = await import("@notionhq/client");
     const notion = new Client({ auth: process.env.NOTION_TOKEN });
     const DB_ID = process.env.NOTION_DB_ID;
 
@@ -28,7 +30,7 @@ export async function handler(event) {
         SBP:    { number: Number(sbp) },
         DBP:    { number: Number(dbp) },
         HR:     { number: hr != null ? Number(hr) : null },
-        Weight: { number: wt != null ? Number(wt) : null }
+        Weight: { number: wt != null ? Number(wt) : null },
       },
       children: note ? [{
         object: "block", type: "paragraph",
