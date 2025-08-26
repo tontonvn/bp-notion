@@ -5,7 +5,7 @@ const cors = {
 };
 
 export async function handler(event) {
-  // CORS preflight
+  // Preflight
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers: cors, body: "ok" };
   }
@@ -17,7 +17,6 @@ export async function handler(event) {
     const { sbp, dbp, hr, wt, t, note, site } = JSON.parse(event.body || "{}");
     if (!sbp || !dbp || !t) throw new Error("missing fields");
 
-    // ここで初めてSDKを読み込む（依存未解決でもOPTIONSは成功する）
     const { Client } = await import("@notionhq/client");
     const notion = new Client({ auth: process.env.NOTION_TOKEN });
     const DB_ID = process.env.NOTION_DB_ID;
