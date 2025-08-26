@@ -268,7 +268,17 @@ const sum=a=>a.reduce((x,y)=>x+y,0); const avg=a=>sum(a)/a.length;
 
 function addDays(d,n){ const dd=new Date(d); dd.setDate(dd.getDate()+n); return dd; }
 function fmt(iso){ const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
-function escapeHTML(s){ return s.replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",""":"&quot;"}[m])); }
+function escapeHTML(s){ 
+  return s.replace(/[&<>"]/g,
+    m => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;"
+    }[m])
+  ); 
+}
+
 function toCSV(arr){ const header='datetime,site,sbp,dbp,hr,wt,note\n'; const rows=arr.map(e=>[e.t,e.site,e.sbp,e.dbp,e.hr??'',e.wt??'',(e.note||'').replace(/\n/g,' ')].join(',')); return header+rows.join('\n'); }
 function fromCSV(text){ const lines=text.trim().split(/\r?\n/), out=[], idx={}; lines[0].split(',').forEach((h,i)=>idx[h.trim()]=i); for(let i=1;i<lines.length;i++){ const c=lines[i].split(','); out.push({ t:c[idx.datetime], site:c[idx.site]||'home', sbp:Number(c[idx.sbp]), dbp:Number(c[idx.dbp]), hr:c[idx.hr]?Number(c[idx.hr]):null, wt:c[idx.wt]?Number(c[idx.wt]):null, note:c[idx.note]||'' }); } return out; }
 
